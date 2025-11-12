@@ -1,0 +1,8 @@
+postgres_host: "postgres"
+postgres_user: "user"
+postgres_password: "password"
+postgres_db: "mydb"
+postgres_port: 5432
+postgres_ssl_mode: "disable"
+
+start_port: ":8080"

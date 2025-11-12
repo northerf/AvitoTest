@@ -1,0 +1,6 @@
+#Выкладываю секретки для тестового задания, иначе бы попали в .gitignore.
+#.env
+#postgres_data/
+#Dockerfile
+#config.yaml
+.idea/

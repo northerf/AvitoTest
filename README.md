@@ -37,6 +37,8 @@
 
 # Инструкция по запуску
 
+**P.S Все секретки были выложены в открытый доступ для более удобного тестирования задания, иначе бы попали в .gitignore**
+
 
 **1. Скачать [ZIP-архив](https://github.com/northerf/AvitoTest/archive/refs/heads/main.zip) или клонировать [репозиторий](https://github.com/northerf/AvitoTest.git)**
   

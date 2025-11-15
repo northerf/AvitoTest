@@ -23,7 +23,6 @@ func (s *ReviewerService) SelectReviewers(team *Team, authorID string, count int
 	rand.Shuffle(len(candidates), func(i, j int) {
 		candidates[i], candidates[j] = candidates[j], candidates[i]
 	})
-
 	for i := 0; i < count && i < len(candidates); i++ {
 		selected = append(selected, candidates[i].UserID)
 	}

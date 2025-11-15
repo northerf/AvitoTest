@@ -27,6 +27,23 @@ services:
       - "-database=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=${SSL_MODE}"
       - "up"
 
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.seed
+    container_name: avito-seed
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - SSL_MODE=${SSL_MODE}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
   pr-service:
     build:
       context: .
@@ -49,3 +66,6 @@ services:
 
 volumes:
   postgres_data:
+
+
+

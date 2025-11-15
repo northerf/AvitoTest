@@ -2,9 +2,10 @@ package repository
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"strconv"
 )
 
 type Config struct {

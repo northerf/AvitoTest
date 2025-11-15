@@ -1,9 +1,11 @@
 package handler
 
 import (
-	"Avito/internal/schema"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"Avito/internal/schema"
 )
 
 func (h *Handler) CreateTeam(c *gin.Context) {
@@ -12,14 +14,16 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 		ErrorResponse(c, http.StatusBadRequest, schema.ErrNotFound, "Invalid request body")
 		return
 	}
-	team, err := h.services.Team.Create(c.Request.Context(), req.TeamName)
+	team, members, err := h.services.Team.CreateWithMembers(c.Request.Context(), req.TeamName, req.Members)
 	if err != nil {
 		MapErrorToResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, schema.Team{
-		TeamName: team.Name,
-		Members:  []schema.TeamMember{},
+	c.JSON(http.StatusCreated, gin.H{
+		"team": schema.Team{
+			TeamName: team.Name,
+			Members:  members,
+		},
 	})
 }
 
@@ -46,4 +50,20 @@ func (h *Handler) GetTeam(c *gin.Context) {
 		TeamName: team.Name,
 		Members:  members,
 	})
+}
+
+func (h *Handler) DeactivateUsers(c *gin.Context) {
+	var req schema.DeactivateUsersRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		ErrorResponse(c, http.StatusBadRequest, schema.ErrNotFound, "Invalid request")
+		return
+	}
+	result, err := h.services.Team.DeactivateUsersAndReassign(
+		c.Request.Context(), req.TeamName, req.UserIDs,
+	)
+	if err != nil {
+		MapErrorToResponse(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }

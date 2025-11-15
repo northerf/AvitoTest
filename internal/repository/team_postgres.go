@@ -1,13 +1,15 @@
 package repository
 
 import (
-	"Avito/internal/domain"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+
+	"Avito/internal/domain"
 )
 
 type TeamPostgres struct {
@@ -48,13 +50,10 @@ func (r *TeamPostgres) GetWithMembers(ctx context.Context, teamName string) (*do
 	if err != nil {
 		return nil, nil, err
 	}
-	query := `
-        SELECT u.user_id, u.username, u.team_name, u.is_active
-        FROM users u
+	query := `SELECT u.user_id, u.username, u.team_name, u.is_active FROM users u
         INNER JOIN team_members tm ON u.user_id = tm.user_id
         WHERE tm.team_name = $1
-        ORDER BY u.username
-    `
+        ORDER BY u.username`
 	var users []*domain.User
 	err = r.db.SelectContext(ctx, &users, query, teamName)
 	if err != nil {
@@ -64,11 +63,7 @@ func (r *TeamPostgres) GetWithMembers(ctx context.Context, teamName string) (*do
 }
 
 func (r *TeamPostgres) AddMember(ctx context.Context, teamName string, userID string) error {
-	query := `
-        INSERT INTO team_members (team_name, user_id)
-        VALUES ($1, $2)
-        ON CONFLICT (team_name, user_id) DO NOTHING
-    `
+	query := `INSERT INTO team_members (team_name, user_id) VALUES ($1, $2) ON CONFLICT (team_name, user_id) DO NOTHING`
 	_, err := r.db.ExecContext(ctx, query, teamName, userID)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23503" {
@@ -85,12 +80,9 @@ func (r *TeamPostgres) AddMember(ctx context.Context, teamName string, userID st
 }
 
 func (r *TeamPostgres) GetByUserID(ctx context.Context, userID string) (*domain.Team, error) {
-	query := `
-        SELECT t.team_name
-        FROM teams t
+	query := `SELECT t.team_name FROM teams t
         INNER JOIN team_members tm ON t.team_name = tm.team_name
-        WHERE tm.user_id = $1
-    `
+        WHERE tm.user_id = $1`
 	var team domain.Team
 	err := r.db.GetContext(ctx, &team, query, userID)
 	if err != nil {

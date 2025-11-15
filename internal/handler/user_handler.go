@@ -1,9 +1,11 @@
 package handler
 
 import (
-	"Avito/internal/schema"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"Avito/internal/schema"
 )
 
 func (h *Handler) SetUserActive(c *gin.Context) {
@@ -12,26 +14,23 @@ func (h *Handler) SetUserActive(c *gin.Context) {
 		ErrorResponse(c, http.StatusBadRequest, schema.ErrNotFound, "Invalid request body")
 		return
 	}
-	userID := c.Query("user_id")
-	if userID == "" {
-		ErrorResponse(c, http.StatusBadRequest, schema.ErrNotFound, "user_id is required")
-		return
-	}
-	err := h.services.User.SetActive(c.Request.Context(), userID, *req.IsActive)
+	err := h.services.User.SetActive(c.Request.Context(), req.UserID, *req.IsActive)
 	if err != nil {
 		MapErrorToResponse(c, err)
 		return
 	}
-	user, err := h.services.User.GetByID(c.Request.Context(), userID)
+	user, err := h.services.User.GetByID(c.Request.Context(), req.UserID)
 	if err != nil {
 		MapErrorToResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, schema.User{
-		UserID:   user.UserID,
-		Username: user.Username,
-		TeamName: user.TeamName,
-		IsActive: user.IsActive,
+	c.JSON(http.StatusOK, gin.H{
+		"user": schema.User{
+			UserID:   user.UserID,
+			Username: user.Username,
+			TeamName: user.TeamName,
+			IsActive: user.IsActive,
+		},
 	})
 }
 
@@ -41,7 +40,6 @@ func (h *Handler) GetUserReviews(c *gin.Context) {
 		ErrorResponse(c, http.StatusBadRequest, schema.ErrNotFound, "user_id is required")
 		return
 	}
-
 	prs, err := h.services.PullRequest.GetByReviewerID(c.Request.Context(), userID)
 	if err != nil {
 		MapErrorToResponse(c, err)
@@ -56,5 +54,8 @@ func (h *Handler) GetUserReviews(c *gin.Context) {
 			Status:          schema.PRStatus(pr.Status),
 		}
 	}
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, gin.H{
+		"user_id":       userID,
+		"pull_requests": result,
+	})
 }

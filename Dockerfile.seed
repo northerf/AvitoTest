@@ -7,17 +7,16 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/app ./cmd/PRService/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/seed ./scripts/seed.go
 
 FROM alpine:latest
 
+WORKDIR /app
+
 RUN apk --no-cache add ca-certificates
 
-WORKDIR /root/
+COPY --from=builder /bin/seed ./seed
 
-COPY --from=builder /bin/app ./app
 COPY config.yaml .
 
-EXPOSE 8080
-
-CMD ["./app"]
+CMD ["./seed"]

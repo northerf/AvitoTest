@@ -1,11 +1,12 @@
 package service
 
 import (
+	"context"
+
+	"github.com/google/uuid"
+
 	"Avito/internal/domain"
 	"Avito/internal/repository"
-	"context"
-	"fmt"
-	"github.com/google/uuid"
 )
 
 type UserServiceImpl struct {
@@ -26,7 +27,7 @@ func (s *UserServiceImpl) Create(ctx context.Context, username string) (*domain.
 	}
 	err := s.userRepo.Create(ctx, user)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, err
 	}
 	return user, nil
 }

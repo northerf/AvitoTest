@@ -1,8 +1,9 @@
 package handler
 
 import (
-	"Avito/internal/service"
 	"github.com/gin-gonic/gin"
+
+	"Avito/internal/service"
 )
 
 type Handler struct {
@@ -21,6 +22,7 @@ func (h *Handler) InitRoutes() *gin.Engine {
 	{
 		teams.POST("/add", h.CreateTeam)
 		teams.GET("/get", h.GetTeam)
+		teams.POST("/deactivate", h.DeactivateUsers)
 	}
 	users := router.Group("/users")
 	{
@@ -33,5 +35,12 @@ func (h *Handler) InitRoutes() *gin.Engine {
 		pr.POST("/merge", h.MergePR)
 		pr.POST("/reassign", h.ReassignReviewer)
 	}
+	stats := router.Group("/stats")
+	{
+		stats.GET("/allstats", h.GetStatistics)
+		stats.GET("/user", h.GetUserStatistics)
+	}
+
+	router.GET("/health", h.Health)
 	return router
 }

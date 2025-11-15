@@ -21,7 +21,12 @@ type PullRequest struct {
 
 type CreatePRRequest struct {
 	PullRequestName string `json:"pull_request_name" binding:"required"`
+	PullRequestID   string `json:"pull_request_id" binding:"required"`
 	AuthorID        string `json:"author_id" binding:"required"`
+}
+
+type MergePRRequest struct {
+	PullRequestID string `json:"pull_request_id" binding:"required"`
 }
 
 type AssignReviewersRequest struct {
@@ -29,6 +34,7 @@ type AssignReviewersRequest struct {
 }
 
 type ReassignReviewerRequest struct {
+	PullRequestID string `json:"pull_request_id" binding:"required"`
 	OldReviewerID string `json:"old_reviewer_id" binding:"required"`
-	NewReviewerID string `json:"new_reviewer_id" binding:"required"`
+	NewReviewerID string `json:"new_reviewer_id"`
 }

@@ -1,12 +1,12 @@
 package service
 
 import (
-	"Avito/internal/domain"
-	"Avito/internal/repository"
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	"time"
+
+	"Avito/internal/domain"
+	"Avito/internal/repository"
 )
 
 type PullRequestServiceImpl struct {
@@ -26,17 +26,17 @@ func NewPullRequestService(prRepo repository.PullRequestRepository,
 	}
 }
 
-func (s *PullRequestServiceImpl) Create(ctx context.Context, name string, authorID string) (*domain.PullRequest, error) {
+func (s *PullRequestServiceImpl) Create(ctx context.Context, id string, name string, authorID string) (*domain.PullRequest, error) {
 	_, err := s.userRepo.GetByID(ctx, authorID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get author: %w", err)
+		return nil, err
 	}
 	_, err = s.teamRepo.GetByUserID(ctx, authorID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get author team: %w", err)
+		return nil, err
 	}
 	pr := &domain.PullRequest{
-		ID:                uuid.New().String(),
+		ID:                id,
 		Name:              name,
 		AuthorID:          authorID,
 		Status:            domain.StatusOpen,
@@ -45,7 +45,7 @@ func (s *PullRequestServiceImpl) Create(ctx context.Context, name string, author
 	}
 	err = s.prRepo.Create(ctx, pr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create PR: %w", err)
+		return nil, err
 	}
 	err = s.AssignReviewer(ctx, pr.ID, 2)
 	if err != nil {
@@ -57,15 +57,15 @@ func (s *PullRequestServiceImpl) Create(ctx context.Context, name string, author
 func (s *PullRequestServiceImpl) AssignReviewer(ctx context.Context, prID string, count int) error {
 	pr, err := s.prRepo.GetByID(ctx, prID)
 	if err != nil {
-		return fmt.Errorf("failed to get PR: %w", err)
+		return err
 	}
 	team, err := s.teamRepo.GetByUserID(ctx, pr.AuthorID)
 	if err != nil {
-		return fmt.Errorf("failed to get team: %w", err)
+		return err
 	}
 	reviewers, err := s.prRepo.GetActiveReviewersFromTeam(ctx, team.Name, pr.AuthorID, count)
 	if err != nil {
-		return fmt.Errorf("failed to get active reviewers: %w", err)
+		return err
 	}
 	for _, reviewerID := range reviewers {
 		err = pr.AssignReviewer(reviewerID)
@@ -74,34 +74,53 @@ func (s *PullRequestServiceImpl) AssignReviewer(ctx context.Context, prID string
 		}
 		err = s.prRepo.AssignReviewer(ctx, prID, reviewerID)
 		if err != nil {
-			return fmt.Errorf("failed to assign reviewer: %w", err)
+			return err
 		}
 	}
 	return nil
 }
 
-func (s *PullRequestServiceImpl) ReassignReviewer(ctx context.Context, prID string, oldReviewerID string, newReviewerID string) error {
+func (s *PullRequestServiceImpl) ReassignReviewer(ctx context.Context, prID string, oldReviewerID string, newReviewerID string) (string, error) {
 	pr, err := s.prRepo.GetByID(ctx, prID)
 	if err != nil {
-		return fmt.Errorf("failed to get PR: %w", err)
+		return "", err
 	}
 	err = pr.RemoveReviewer(oldReviewerID)
 	if err != nil {
-		return err
+		return "", err
 	}
-	err = pr.AssignReviewer(newReviewerID)
+	var selectedReviewerID string
+	if newReviewerID == "" {
+		excludeIDs := []string{pr.AuthorID, oldReviewerID}
+		for _, rid := range pr.AssignedReviewers {
+			if rid != oldReviewerID {
+				excludeIDs = append(excludeIDs, rid)
+			}
+		}
+		reviewers, err := s.prRepo.GetActiveReviewersFromUserTeam(ctx, oldReviewerID, excludeIDs, 1)
+		if err != nil {
+			return "", err
+		}
+		if len(reviewers) == 0 {
+			return "", domain.ErrNoActiveCandidates
+		}
+		selectedReviewerID = reviewers[0]
+	} else {
+		selectedReviewerID = newReviewerID
+	}
+	err = pr.AssignReviewer(selectedReviewerID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	err = s.prRepo.RemoveReviewer(ctx, prID, oldReviewerID)
 	if err != nil {
-		return fmt.Errorf("failed to remove reviewer: %w", err)
+		return "", err
 	}
-	err = s.prRepo.AssignReviewer(ctx, prID, newReviewerID)
+	err = s.prRepo.AssignReviewer(ctx, prID, selectedReviewerID)
 	if err != nil {
-		return fmt.Errorf("failed to assign reviewer: %w", err)
+		return "", err
 	}
-	return nil
+	return selectedReviewerID, nil
 }
 
 func (s *PullRequestServiceImpl) Merge(ctx context.Context, id string) (*domain.PullRequest, error) {

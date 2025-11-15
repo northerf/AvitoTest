@@ -1,13 +1,15 @@
 package repository
 
 import (
-	"Avito/internal/domain"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+
+	"Avito/internal/domain"
 )
 
 type PullRequestPostgres struct {
@@ -19,12 +21,12 @@ func NewPullRequestPostgres(db *sqlx.DB) *PullRequestPostgres {
 }
 
 func (r *PullRequestPostgres) Create(ctx context.Context, pr *domain.PullRequest) error {
-	query := `INSERT INTO pull_requests (pull_request_id, pull_request_name, author_id, status, created_at)
-        VALUES ($1, $2, $3, $4, NOW())
+	query := `INSERT INTO pull_requests (pull_request_id, pull_request_name, author_id, status, created_at) VALUES ($1, $2, $3, $4, NOW())
         RETURNING created_at`
 	err := r.db.QueryRowContext(ctx, query, pr.ID, pr.Name, pr.AuthorID, pr.Status).Scan(&pr.CreatedAt)
 	if err != nil {
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
 			return domain.ErrPRExists
 		}
 		return fmt.Errorf("failed to create pull request: %w", err)
@@ -33,8 +35,7 @@ func (r *PullRequestPostgres) Create(ctx context.Context, pr *domain.PullRequest
 }
 
 func (r *PullRequestPostgres) GetByID(ctx context.Context, id string) (*domain.PullRequest, error) {
-	query := `SELECT pr.pull_request_id, pr.pull_request_name, pr.author_id, pr.status, pr.created_at,
-            pr.merged_at,
+	query := `SELECT pr.pull_request_id, pr.pull_request_name, pr.author_id, pr.status, pr.created_at, pr.merged_at,
             COALESCE(array_agg(prr.reviewer_id) FILTER (WHERE prr.reviewer_id IS NOT NULL), '{}') as assigned_reviewers
         FROM pull_requests pr
         LEFT JOIN pr_reviewers prr ON pr.pull_request_id = prr.pull_request_id
@@ -156,8 +157,7 @@ func (r *PullRequestPostgres) RemoveReviewer(ctx context.Context, prID string, r
 }
 
 func (r *PullRequestPostgres) GetByReviewerID(ctx context.Context, reviewerID string) ([]*domain.PullRequest, error) {
-	query := `SELECT DISTINCT pr.pull_request_id, pr.pull_request_name, pr.author_id, pr.status, 
-               pr.created_at, pr.merged_at
+	query := `SELECT DISTINCT pr.pull_request_id, pr.pull_request_name, pr.author_id, pr.status, pr.created_at, pr.merged_at
         FROM pull_requests pr
         INNER JOIN pr_reviewers prr ON pr.pull_request_id = prr.pull_request_id
         WHERE prr.reviewer_id = $1
@@ -168,8 +168,7 @@ func (r *PullRequestPostgres) GetByReviewerID(ctx context.Context, reviewerID st
 		return nil, fmt.Errorf("failed to get pull requests by reviewer: %w", err)
 	}
 	for _, pr := range prs {
-		reviewersQuery := `
-            SELECT reviewer_id FROM pr_reviewers WHERE pull_request_id = $1`
+		reviewersQuery := `SELECT reviewer_id FROM pr_reviewers WHERE pull_request_id = $1`
 		err = r.db.SelectContext(ctx, &pr.AssignedReviewers, reviewersQuery, pr.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get reviewers: %w", err)
@@ -181,7 +180,8 @@ func (r *PullRequestPostgres) GetByReviewerID(ctx context.Context, reviewerID st
 func (r *PullRequestPostgres) GetActiveReviewersFromTeam(ctx context.Context, teamName string, excludeUserID string, limit int) ([]string, error) {
 	query := `SELECT u.user_id FROM users u
         INNER JOIN team_members tm ON u.user_id = tm.user_id
-        WHERE tm.team_name = $1 AND u.user_id != $2 AND u.is_active = true
+        WHERE tm.team_name = $1
+          AND u.is_active = true AND u.user_id != $2
         ORDER BY RANDOM()
         LIMIT $3`
 	var reviewers []string
@@ -190,4 +190,71 @@ func (r *PullRequestPostgres) GetActiveReviewersFromTeam(ctx context.Context, te
 		return nil, fmt.Errorf("failed to get active reviewers: %w", err)
 	}
 	return reviewers, nil
+}
+
+func (r *PullRequestPostgres) GetActiveReviewersFromUserTeam(ctx context.Context, userID string, excludeUserIDs []string, limit int) ([]string, error) {
+	query := `SELECT u.user_id FROM users u
+        INNER JOIN team_members tm ON u.user_id = tm.user_id
+        WHERE tm.team_name = (SELECT team_name FROM users WHERE user_id = $1) 
+        AND u.user_id != ALL($2) AND u.is_active = true
+        ORDER BY RANDOM()
+        LIMIT $3`
+	var reviewers []string
+	err := r.db.SelectContext(ctx, &reviewers, query, userID, pq.Array(excludeUserIDs), limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active reviewers from user team: %w", err)
+	}
+	return reviewers, nil
+}
+
+func (r *PullRequestPostgres) GetOpenPRsByReviewerIDs(ctx context.Context, reviewerIDs []string) ([]*domain.PullRequest, error) {
+	if len(reviewerIDs) == 0 {
+		return []*domain.PullRequest{}, nil
+	}
+	query := `SELECT DISTINCT pr.pull_request_id, pr.pull_request_name, pr.author_id, pr.status, pr.created_at,pr.merged_at
+        FROM pull_requests pr
+        INNER JOIN pr_reviewers prr ON pr.pull_request_id = prr.pull_request_id
+        WHERE prr.reviewer_id = ANY($1) AND pr.status = 'OPEN'`
+	var prs []*domain.PullRequest
+	err := r.db.SelectContext(ctx, &prs, query, pq.Array(reviewerIDs))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get open PRs: %w", err)
+	}
+	for _, pr := range prs {
+		reviewersQuery := `SELECT reviewer_id FROM pr_reviewers WHERE pull_request_id = $1`
+		err = r.db.SelectContext(ctx, &pr.AssignedReviewers, reviewersQuery, pr.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get reviewers for PR %s: %w", pr.ID, err)
+		}
+	}
+	return prs, nil
+}
+
+func (r *PullRequestPostgres) BatchReassignReviewers(ctx context.Context, reassignments []domain.ReviewerReassignment) error {
+	if len(reassignments) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+	for _, reassignment := range reassignments {
+		deleteQuery := `DELETE FROM pr_reviewers WHERE pull_request_id = $1 AND reviewer_id = $2`
+		_, err := tx.ExecContext(ctx, deleteQuery, reassignment.PRID, reassignment.OldReviewerID)
+		if err != nil {
+			return fmt.Errorf("failed to remove old reviewer: %w", err)
+		}
+		if reassignment.NewReviewerID != "" {
+			insertQuery := `INSERT INTO pr_reviewers (pull_request_id, reviewer_id) VALUES ($1, $2) ON CONFLICT (pull_request_id, reviewer_id) DO NOTHING`
+			_, err = tx.ExecContext(ctx, insertQuery, reassignment.PRID, reassignment.NewReviewerID)
+			if err != nil {
+				return fmt.Errorf("failed to assign new reviewer: %w", err)
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit batch reassignment: %w", err)
+	}
+	return nil
 }

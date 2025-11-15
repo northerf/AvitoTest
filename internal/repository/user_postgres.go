@@ -1,13 +1,15 @@
 package repository
 
 import (
-	"Avito/internal/domain"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+
+	"Avito/internal/domain"
 )
 
 type UserPostgres struct {
@@ -19,8 +21,7 @@ func NewUserPostgres(db *sqlx.DB) *UserPostgres {
 }
 
 func (r *UserPostgres) Create(ctx context.Context, user *domain.User) error {
-	query := `INSERT INTO users (user_id, username, team_name, is_active)
-        VALUES ($1, $2, $3, $4)`
+	query := `INSERT INTO users (user_id, username, team_name, is_active) VALUES ($1, $2, $3, $4)`
 	_, err := r.db.ExecContext(ctx, query, user.UserID, user.Username, user.TeamName, user.IsActive)
 	if err != nil {
 		if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "23505" {
@@ -74,8 +75,7 @@ func (r *UserPostgres) SetActive(ctx context.Context, userID string, isActive bo
 }
 
 func (r *UserPostgres) GetByTeamName(ctx context.Context, teamName string) ([]*domain.User, error) {
-	query := `SELECT u.user_id, u.username, u.team_name, u.is_active
-        FROM users u
+	query := `SELECT u.user_id, u.username, u.team_name, u.is_active FROM users u
         INNER JOIN team_members tm ON u.user_id = tm.user_id
         WHERE tm.team_name = $1
         ORDER BY u.username`
@@ -85,4 +85,45 @@ func (r *UserPostgres) GetByTeamName(ctx context.Context, teamName string) ([]*d
 		return nil, fmt.Errorf("failed to get users by team: %w", err)
 	}
 	return users, nil
+}
+
+func (r *UserPostgres) Update(ctx context.Context, user *domain.User) error {
+	query := `UPDATE users SET username = $1, team_name = $2, is_active = $3 WHERE user_id = $4`
+	result, err := r.db.ExecContext(ctx, query, user.Username, user.TeamName, user.IsActive, user.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return domain.ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *UserPostgres) GetByIDs(ctx context.Context, userIDs []string) ([]*domain.User, error) {
+	if len(userIDs) == 0 {
+		return []*domain.User{}, nil
+	}
+	query := `SELECT user_id, username, team_name, is_active FROM users WHERE user_id = ANY($1)`
+	var users []*domain.User
+	err := r.db.SelectContext(ctx, &users, query, pq.Array(userIDs))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users by IDs: %w", err)
+	}
+	return users, nil
+}
+
+func (r *UserPostgres) DeactivateUsers(ctx context.Context, userIDs []string) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+	query := `UPDATE users SET is_active = false WHERE user_id = ANY($1)`
+	_, err := r.db.ExecContext(ctx, query, pq.Array(userIDs))
+	if err != nil {
+		return fmt.Errorf("failed to deactivate users: %w", err)
+	}
+	return nil
 }

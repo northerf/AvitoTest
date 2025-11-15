@@ -1,9 +1,12 @@
 package repository
 
 import (
-	"Avito/internal/domain"
 	"context"
+
 	"github.com/jmoiron/sqlx"
+
+	"Avito/internal/domain"
+	"Avito/internal/schema"
 )
 
 type PullRequestRepository interface {
@@ -14,6 +17,9 @@ type PullRequestRepository interface {
 	AssignReviewer(ctx context.Context, prID string, reviewerID string) error
 	RemoveReviewer(ctx context.Context, prID string, reviewerID string) error
 	GetActiveReviewersFromTeam(ctx context.Context, teamName string, excludeUserID string, limit int) ([]string, error)
+	GetActiveReviewersFromUserTeam(ctx context.Context, userID string, excludeUserIDs []string, limit int) ([]string, error)
+	GetOpenPRsByReviewerIDs(ctx context.Context, reviewerIDs []string) ([]*domain.PullRequest, error)
+	BatchReassignReviewers(ctx context.Context, reassignments []domain.ReviewerReassignment) error
 }
 
 type UserRepository interface {
@@ -22,6 +28,9 @@ type UserRepository interface {
 	GetByUsername(ctx context.Context, username string) (*domain.User, error)
 	SetActive(ctx context.Context, userID string, isActive bool) error
 	GetByTeamName(ctx context.Context, teamName string) ([]*domain.User, error)
+	Update(ctx context.Context, user *domain.User) error
+	GetByIDs(ctx context.Context, userIDs []string) ([]*domain.User, error)
+	DeactivateUsers(ctx context.Context, userIDs []string) error
 }
 
 type TeamRepository interface {
@@ -32,10 +41,16 @@ type TeamRepository interface {
 	GetByUserID(ctx context.Context, userID string) (*domain.Team, error)
 }
 
+type StatsRepository interface {
+	GetStatistics(ctx context.Context) (*schema.Statistics, error)
+	GetUserStats(ctx context.Context, userID string) (*schema.UserStats, error)
+}
+
 type Repository struct {
 	PullRequest PullRequestRepository
 	User        UserRepository
 	Team        TeamRepository
+	Stats       StatsRepository
 }
 
 func NewRepository(db *sqlx.DB) *Repository {
@@ -43,5 +58,6 @@ func NewRepository(db *sqlx.DB) *Repository {
 		PullRequest: NewPullRequestPostgres(db),
 		User:        NewUserPostgres(db),
 		Team:        NewTeamPostgres(db),
+		Stats:       NewStatsPostgres(db),
 	}
 }

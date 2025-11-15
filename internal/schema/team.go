@@ -6,5 +6,6 @@ type Team struct {
 }
 
 type CreateTeamRequest struct {
-	TeamName string `json:"team_name" binding:"required"`
+	TeamName string       `json:"team_name" binding:"required"`
+	Members  []TeamMember `json:"members" binding:"required"`
 }

@@ -4,7 +4,6 @@ import (
 	"Avito/internal/handler"
 	"Avito/internal/repository"
 	"Avito/internal/service"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
